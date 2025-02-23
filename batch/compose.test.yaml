@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  mysql-test:
+    image: mysql:8.0
+    container_name: batch-mysql-test
+    platform: linux/amd64
+    environment:
+      - MYSQL_DATABASE=batch_test_db
+      - MYSQL_USER=test_user
+      - MYSQL_PASSWORD=test_pass
+      - MYSQL_ROOT_PASSWORD=root_pass
+      - TZ=Asia/Tokyo
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-test-data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d
+    networks:
+      - batch-test-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    command: 
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --init-file=/docker-entrypoint-initdb.d/00_create_batch_tables.sql
+
+  batch-test:
+    build: 
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: batch-test
+    environment:
+      - SPRING_PROFILES_ACTIVE=test
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-test:3306/batch_test_db?useSSL=false&allowPublicKeyRetrieval=true&connectTimeout=60000
+      - SPRING_DATASOURCE_USERNAME=test_user
+      - SPRING_DATASOURCE_PASSWORD=test_pass
+      - SPRING_BATCH_JDBC_INITIALIZE_SCHEMA=never
+      - LOGGING_LEVEL_ROOT=DEBUG
+      - LOGGING_LEVEL_COM_BATCH=DEBUG
+      - TZ=Asia/Tokyo
+    networks:
+      - batch-test-network
+    depends_on:
+      mysql-test:
+        condition: service_healthy
+
+networks:
+  batch-test-network:
+    driver: bridge
+
+volumes:
+  mysql-test-data:
+    driver: local
+    
